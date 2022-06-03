@@ -11,7 +11,7 @@
         setTimeout(CopyTrackTitles, 100);
         return;
     }
-    
+
     const CACHE = new Map();
     // Persistent settings
     const LOCALSTORAGE_KEY = "CopyTrackTitles:track-format";
@@ -119,8 +119,8 @@
 
 
 	// --- Begin Helpers
-    const fetchTracks = async (uncachedTrackIds) => {
-		return CosmosAsync.get(`https://api.spotify.com/v1/tracks/?ids=${uncachedTrackIds.join(',')}`);
+    const fetchTracks = async (trackIds) => {
+		return CosmosAsync.get(`https://api.spotify.com/v1/tracks/?ids=${trackIds.join(',')}`);
     };
     const cacheFetchedTracks = async (fetchedTracks) => {
 		fetchedTracks.tracks?.forEach((track) => {
@@ -155,8 +155,8 @@
 	// OnClickCallback = (uris: string[], uids?: string[], contextUri?: string) => void;
     const ToClipboard = async (uris) => {
 		let fetchExtraMessage = "";
-		
-		let uncachedUris =
+
+		let uncachedIds =
 		[...new Set(uris)]
 			.reduce((a, uri) => {
 				const base62 = URI.from(uri).getBase62Id();
@@ -165,10 +165,10 @@
 				}
 				return a;
 			}, []);
-		if (uncachedUris.length) {
+		if (uncachedIds.length) {
 			let fetchedTracks = { tracks: [] };
 			try {
-				fetchedTracks = await fetchTracks(uncachedUris);
+				fetchedTracks = await fetchTracks(uncachedIds);
 			}
 			catch (ex) {
 				Spicetify.showNotification(`Error while obtaining tracks info from server: ${ex.toString()}`);
@@ -207,7 +207,7 @@
 		const { left, top } = self.element.getBoundingClientRect();
 		settingsPane.toggleAt(left, top);
 	};
-	
+
     new Spicetify.Topbar.Button(
 		TOPBAR_TOOLTIP_TEXT,
 		"copy",
