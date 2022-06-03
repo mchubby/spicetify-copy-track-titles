@@ -2,7 +2,7 @@
     {
         "name": "CopyTrackTitles",
         "description": "Copy selected titles to clipboard.",
-        "preview": "docs/menuitem.png",
+        "preview": "docs/rodentia-icons_utilities-clipboard-manager.svg",
         "main": "dist/copy-track-titles.js",
         "readme": "README.md"
     }
