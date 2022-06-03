@@ -6,13 +6,13 @@
 
 /// <reference path="../../spicetify-cli/globals.d.ts" />
 (function CopyTrackTitles() {
-    const { CosmosAsync, LocalStorage, URI } = Spicetify;
-    if (!(CosmosAsync && LocalStorage && URI)) {
+    const { CosmosAsync, LocalStorage, Platform, URI } = Spicetify;
+    if (!(CosmosAsync && LocalStorage && Platform && URI)) {
         setTimeout(CopyTrackTitles, 100);
         return;
     }
     
-    const CACHE = {};
+    const CACHE = new Map();
     // Persistent settings
     const LOCALSTORAGE_KEY = "CopyTrackTitles:track-format";
     const userConfigs = {
@@ -119,16 +119,16 @@
 
 
 	// --- Begin Helpers
-    const fetchTrack = async (uri) => {
-        if (!CACHE[uri]) {
-			const uriObj = URI.from(uri);
-			const res = await CosmosAsync.get(`https://api.spotify.com/v1/tracks/${uriObj.getBase62Id()}`);
-			CACHE[uri] = {
-				title: res.name,
-				artists: res.artists,
-			};
-		}
-		return CACHE[uri];
+    const fetchTracks = async (uncachedTrackIds) => {
+		return CosmosAsync.get(`https://api.spotify.com/v1/tracks/?ids=${uncachedTrackIds.join(',')}`);
+    };
+    const cacheFetchedTracks = async (fetchedTracks) => {
+		fetchedTracks.tracks?.forEach((track) => {
+			CACHE.set(track.id, {
+				title: track.name,
+				artists: track.artists,
+			});
+		});
     };
 
 	// %FIELD% formatting
@@ -153,32 +153,42 @@
 	// --- End Helpers
 
 	// OnClickCallback = (uris: string[], uids?: string[], contextUri?: string) => void;
-    const ToClipboard = async (uris, uids, context) => {
-		// Note: no permission to use Clipboard API
-		var textArea = document.createElement("textarea");
-			textArea.style.position = 'absolute';
-			textArea.style.height = 0;
-		document.body.appendChild(textArea);
-		let results = [];
+    const ToClipboard = async (uris) => {
+		let fetchExtraMessage = "";
 		
-		let promises = [...new Set(uris)].map((val) => { return fetchTrack(val, context); });
-		await Promise.all(promises);
-		try {
-			uris.filter((uri) => CACHE[uri])
-				.forEach((uri) => results.push(metaToString(CACHE[uri])));
-			let msg = "Failed to fetch track info";
-			if (results.length) {  // does not handle partial failures
-				textArea.value = results.join("\n");
-				textArea.focus();
-				textArea.select();
-				msg = document.execCommand('copy') ?
-					`Successfully copied ${results.length} items to clipboard` :
-					'Failed to copy to clipboard';
+		let uncachedUris =
+		[...new Set(uris)]
+			.reduce((a, uri) => {
+				const base62 = URI.from(uri).getBase62Id();
+				if (!CACHE.has(base62)) {
+					a.push(base62);
+				}
+				return a;
+			}, []);
+		if (uncachedUris.length) {
+			let fetchedTracks = { tracks: [] };
+			try {
+				fetchedTracks = await fetchTracks(uncachedUris);
 			}
-			Spicetify.showNotification(msg);
+			catch (ex) {
+				Spicetify.showNotification(`Error while obtaining tracks info from server: ${ex.toString()}`);
+				return;
+			}
+			cacheFetchedTracks(fetchedTracks);
+			fetchExtraMessage = ` — Queried ${fetchedTracks.tracks?.length} tracks from server.`;
 		}
-		finally {
-			document.body.removeChild(textArea);
+
+		let results = uris.reduce((a, uri) => {
+			const base62 = URI.from(uri).getBase62Id();
+			if (CACHE.has(base62)) {
+				a.push(metaToString(CACHE.get(base62)));
+			}
+			return a;
+		}, []);
+
+		if (results.length) {
+			await Platform.ClipboardAPI.copy(results.join("\n"));
+			Spicetify.showNotification(`Copied ${results.length} items to clipboard${fetchExtraMessage}`);
 		}
     }
 
@@ -190,12 +200,12 @@
     ).register();
 
 	// Create absolute-positioned Settings Pane
-	const settings_ui = new CTTPane();
-	document.body.append(settings_ui.container);
+	const settingsPane = new CTTPane();
+	document.body.append(settingsPane.container);
 
 	const openConfig = (self) => {
 		const { left, top } = self.element.getBoundingClientRect();
-		settings_ui.toggleAt(left, top);
+		settingsPane.toggleAt(left, top);
 	};
 	
     new Spicetify.Topbar.Button(
