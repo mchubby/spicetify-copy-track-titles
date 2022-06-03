@@ -1,0 +1,9 @@
+[
+    {
+        "name": "CopyTrackTitles",
+        "description": "Copy selected titles to clipboard.",
+        "preview": "docs/menuitem.png",
+        "main": "dist/copy-track-titles.js",
+        "readme": "README.md"
+    }
+]
